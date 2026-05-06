@@ -10,4 +10,12 @@ class PlaywrightScrapingCache:
         if base is None:
             base = Path()
         self.base = base
-        self.directory_download = base / "downloads"
+
+    @property
+    def directory_download(self) -> Path:
+        """Return the path to the download cache directory."""
+        return self.base / "downloads"
+
+    def ensure_exists(self) -> None:
+        """Create the download cache directory if it does not exist."""
+        self.directory_download.mkdir(parents=True, exist_ok=True)

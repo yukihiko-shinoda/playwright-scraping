@@ -9,8 +9,7 @@ from typing import Self
 
 from playwright.sync_api import sync_playwright
 
-from playwrightscraping.api_common import build_browser_args
-from playwrightscraping.api_common import build_browser_context_options
+from playwrightscraping.api_common import LaunchArguments
 from playwrightscraping.cache import PlaywrightScrapingCache
 
 if TYPE_CHECKING:
@@ -26,25 +25,19 @@ if TYPE_CHECKING:
 __all__ = ["ScrapingBrowser"]
 
 
-class ScrapingBrowser:
-    """The browser."""
-
-    def __init__(self, *, is_economizing: bool = False, download_dir: Path | None = None) -> None:
-        self.is_economizing = is_economizing
-        self.directory_download = download_dir or PlaywrightScrapingCache().directory_download
-        # Note: Playwright doesn't require the root user check that Selenium did
-        # Playwright can run as root without --no-sandbox issues
-        self._playwright: Playwright | None = None
-        self._browser: Browser | None = None
+class _PlaywrightHandles:
+    def __init__(self, *, is_economizing: bool = False, storage_state: Path | None = None) -> None:
+        self.args = LaunchArguments(is_economizing=is_economizing, storage_state=storage_state)
+        self.playwright: Playwright | None = None
+        self.browser: Browser | None = None
         self._context: BrowserContext | None = None
         self._page: Page | None = None
 
     def __enter__(self) -> Self:
-        """Start Playwright browser."""
-        self._playwright = sync_playwright().start()
-        args = build_browser_args(is_economizing=self.is_economizing)
-        self._browser = self._playwright.chromium.launch(args=args)
-        self._context = self._browser.new_context(**build_browser_context_options())
+        """Start Playwright, launch browser, and create context and first page."""
+        self.playwright = sync_playwright().start()
+        self.browser = self.playwright.chromium.launch(args=self.args.browser_args)
+        self._context = self.browser.new_context(**self.args.context_options)
         self._page = self._context.new_page()
         return self
 
@@ -54,16 +47,13 @@ class ScrapingBrowser:
         _exc_value: BaseException | None,
         _traceback: TracebackType | None,
     ) -> None:
-        """Clean up Playwright resources."""
-        self.close_if_needed()
-
-    def close_if_needed(self) -> None:
+        """Close context, browser, and stop Playwright if open."""
         if self._context:
             self._context.close()
-        if self._browser:
-            self._browser.close()
-        if self._playwright:
-            self._playwright.stop()
+        if self.browser:
+            self.browser.close()
+        if self.playwright:
+            self.playwright.stop()
 
     @property
     def context(self) -> BrowserContext:
@@ -80,6 +70,74 @@ class ScrapingBrowser:
             msg = "Browser page is not initialized. Use context manager."
             raise RuntimeError(msg)
         return self._page
+
+
+class Downloading:
+    """Polls a download directory until all files have finished downloading."""
+
+    INTERVAL = 0.5
+
+    def __init__(self, directory_download: Path, timeout: float, number_of_files: int | None) -> None:
+        self.directory_download = directory_download
+        self.seconds = 0.0
+        self.timeout = timeout
+        self.number_of_files = number_of_files
+
+    def wait(self) -> None:
+        while self.seconds < self.timeout:
+            self._wait()
+
+    def _wait(self) -> None:
+        files = list(self.directory_download.iterdir())
+        # Check if we have the expected number of files
+        if self.number_of_files and len(files) != self.number_of_files:
+            time.sleep(self.INTERVAL)
+            self.seconds += self.INTERVAL
+            return
+        # Check for incomplete downloads
+        has_incomplete = any(str(f).endswith(".crdownload") for f in files)
+        if not has_incomplete:
+            return
+        time.sleep(self.INTERVAL)
+        self.seconds += self.INTERVAL
+
+
+class ScrapingBrowser:
+    """The browser."""
+
+    def __init__(
+        self,
+        *,
+        is_economizing: bool = False,
+        storage_state: Path | None = None,
+        download_dir: Path | None = None,
+    ) -> None:
+        self.directory_download = download_dir or PlaywrightScrapingCache().directory_download
+        self._handles = _PlaywrightHandles(is_economizing=is_economizing, storage_state=storage_state)
+
+    def __enter__(self) -> Self:
+        """Start Playwright browser."""
+        self._handles.__enter__()
+        return self
+
+    def __exit__(
+        self,
+        _exc_type: type[BaseException] | None,
+        _exc_value: BaseException | None,
+        _traceback: TracebackType | None,
+    ) -> None:
+        """Clean up Playwright resources."""
+        self._handles.__exit__(_exc_type, _exc_value, _traceback)
+
+    @property
+    def context(self) -> BrowserContext:
+        """Get the current browser context."""
+        return self._handles.context
+
+    @property
+    def page(self) -> Page:
+        """Get the current page."""
+        return self._handles.page
 
     def wait_for(self, selector: str, *, timeout: float | None = None) -> Locator:
         """Wait for an element to be present.
@@ -132,20 +190,7 @@ class ScrapingBrowser:
             timeout: How many seconds to wait until timing out.
             number_of_files: If provided, also wait for the expected number of files.
         """
-        seconds = 0.0
-        while seconds < timeout:
-            files = list(self.directory_download.iterdir())
-            # Check if we have the expected number of files
-            if number_of_files and len(files) != number_of_files:
-                time.sleep(0.5)
-                seconds += 0.5
-                continue
-            # Check for incomplete downloads
-            has_incomplete = any(str(f).endswith(".crdownload") for f in files)
-            if not has_incomplete:
-                return
-            time.sleep(0.5)
-            seconds += 0.5
+        Downloading(self.directory_download, timeout, number_of_files).wait()
 
     def wait_for_closing_tab(self, expected_number_of_tabs: int, timeout: int) -> None:
         """Wait for closing tab.

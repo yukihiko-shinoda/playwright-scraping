@@ -13,8 +13,7 @@ __all__ = [
     "DEFAULT_BROWSER_VIEW_PORT",
     "DEFAULT_CUSTOM_USER_AGENT",
     "ECONOMIZING_BROWSER_ARGS",
-    "build_browser_args",
-    "build_browser_context_options",
+    "LaunchArguments",
 ]
 
 # User-Agent を設定しないと WAON のページがエラーページを表示する仕様になっていました
@@ -38,6 +37,8 @@ DEFAULT_BROWSER_ARGS = [
 #   https://qiita.com/kozasa/items/8a9d181e43fa0a85f6e5#%EF%BC%91-selenium%E3%81%AE%E5%BC%95%E6%95%B0%E3%81%AB%E7%9C%81%E3%83%A1%E3%83%A2%E3%83%AA%E5%8C%96%E3%81%99%E3%82%8B%E3%81%9F%E3%82%81%E3%81%AE%E5%BC%95%E6%95%B0%E3%82%92%E3%81%A4%E3%81%91%E3%82%8B
 # - How to get headless Chrome running on AWS Lambda | by Marco Lüthy | Medium
 #   https://adieuadieu.medium.com/running-headless-chrome-on-aws-lambda-fa82ad33a9eb
+# Note: Playwright doesn't require the root user check that Selenium did
+# Playwright can run as root without --no-sandbox issues
 ECONOMIZING_BROWSER_ARGS = [
     "--disable-dev-shm-usage",
     "--disable-extensions",
@@ -52,16 +53,21 @@ ECONOMIZING_BROWSER_ARGS = [
 DEFAULT_BROWSER_VIEW_PORT = {"width": 480, "height": 600}
 
 
-def build_browser_args(*, is_economizing: bool) -> list[str]:
-    return DEFAULT_BROWSER_ARGS + (ECONOMIZING_BROWSER_ARGS if is_economizing else [])
+class LaunchArguments:
+    """Arguments for launching the browser and creating a context."""
 
+    def __init__(self, *, is_economizing: bool = False, storage_state: Path | None = None) -> None:
+        self.browser_args = DEFAULT_BROWSER_ARGS + (ECONOMIZING_BROWSER_ARGS if is_economizing else [])
+        self.context_options = self.build_browser_context_options(storage_state=storage_state)
 
-def build_browser_context_options(*, storage_state: Path | None = None) -> dict[str, Any]:
-    opts: dict[str, Any] = {
-        "viewport": DEFAULT_BROWSER_VIEW_PORT,
-        "user_agent": DEFAULT_CUSTOM_USER_AGENT,
-        "accept_downloads": True,
-    }
-    if storage_state is not None:
-        opts["storage_state"] = storage_state
-    return opts
+    @staticmethod
+    def build_browser_context_options(*, storage_state: Path | None = None) -> dict[str, Any]:
+        """Build browser context options with viewport, user agent, and optional storage state."""
+        opts: dict[str, Any] = {
+            "viewport": DEFAULT_BROWSER_VIEW_PORT,
+            "user_agent": DEFAULT_CUSTOM_USER_AGENT,
+            "accept_downloads": True,
+        }
+        if storage_state is not None:
+            opts["storage_state"] = storage_state
+        return opts

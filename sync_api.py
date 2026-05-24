@@ -26,8 +26,18 @@ __all__ = ["ScrapingBrowser"]
 
 
 class _PlaywrightHandles:
-    def __init__(self, *, is_economizing: bool = False, storage_state: Path | None = None) -> None:
-        self.args = LaunchArguments(is_economizing=is_economizing, storage_state=storage_state)
+    def __init__(
+        self,
+        *,
+        is_economizing: bool = False,
+        storage_state: Path | None = None,
+        record_video_dir: str | None = None,
+    ) -> None:
+        self.args = LaunchArguments(
+            is_economizing=is_economizing,
+            storage_state=storage_state,
+            record_video_dir=record_video_dir,
+        )
         self.playwright: Playwright | None = None
         self.browser: Browser | None = None
         self._context: BrowserContext | None = None
@@ -77,7 +87,9 @@ class Downloading:
 
     INTERVAL = 0.5
 
-    def __init__(self, directory_download: Path, timeout: float, number_of_files: int | None) -> None:
+    def __init__(
+        self, directory_download: Path, timeout: float, number_of_files: int | None
+    ) -> None:
         self.directory_download = directory_download
         self.seconds = 0.0
         self.timeout = timeout
@@ -111,9 +123,16 @@ class ScrapingBrowser:
         is_economizing: bool = False,
         storage_state: Path | None = None,
         download_dir: Path | None = None,
+        record_video_dir: str | None = None,
     ) -> None:
-        self.directory_download = download_dir or PlaywrightScrapingCache().directory_download
-        self._handles = _PlaywrightHandles(is_economizing=is_economizing, storage_state=storage_state)
+        self.directory_download = (
+            download_dir or PlaywrightScrapingCache().directory_download
+        )
+        self._handles = _PlaywrightHandles(
+            is_economizing=is_economizing,
+            storage_state=storage_state,
+            record_video_dir=record_video_dir,
+        )
 
     def __enter__(self) -> Self:
         """Start Playwright browser."""
@@ -180,7 +199,9 @@ class ScrapingBrowser:
         output_path = self.directory_download / path
         output_path.write_bytes(pdf_bytes)
 
-    def wait_for_download(self, timeout: int, number_of_files: int | None = None) -> None:
+    def wait_for_download(
+        self, timeout: int, number_of_files: int | None = None
+    ) -> None:
         """Wait for downloads to finish with a specified timeout.
 
         Note: This is a compatibility method. With Playwright, prefer using

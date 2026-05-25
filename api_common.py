@@ -22,7 +22,9 @@ __all__ = [
 def _chromium_major_version() -> str:
     """Return the major version of the Playwright-bundled Chromium executable."""
     search_roots = [
+        Path(os.environ.get("PATCHRIGHT_BROWSERS_PATH", Path.home() / ".cache" / "ms-patchright")),
         Path(os.environ.get("PLAYWRIGHT_BROWSERS_PATH", Path.home() / ".cache" / "ms-playwright")),
+        Path("/ms-patchright"),
         Path("/ms-playwright"),
     ]
     for root in search_roots:
@@ -45,7 +47,7 @@ def _chromium_major_version() -> str:
 
 def _build_user_agent(major: str) -> str:
     return (
-        f"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        f"Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
         f"AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{major}.0.0.0 Safari/537.36"
     )
 
@@ -64,6 +66,8 @@ DEFAULT_CUSTOM_USER_AGENT = _build_user_agent(_CHROMIUM_MAJOR)
 DEFAULT_EXTRA_HTTP_HEADERS = {
     # Sec-CH-UA を設定しないと WAON のページがレスポンスで HTML を返さない仕様になっていました
     "sec-ch-ua": _build_sec_ch_ua(_CHROMIUM_MAJOR),
+    "sec-ch-ua-platform": '"Windows"',
+    "sec-ch-ua-mobile": "?0",
 }
 
 DEFAULT_BROWSER_ARGS = [
@@ -92,7 +96,7 @@ ECONOMIZING_BROWSER_ARGS = [
 # How to prevent crash due to out of memory:
 # - herokuでselenium利用時にクラッシュする場合の解決方法 #Python - Qiita
 #   https://qiita.com/kozasa/items/8a9d181e43fa0a85f6e5#%EF%BC%91-selenium%E3%81%AE%E5%BC%95%E6%95%B0%E3%81%AB%E7%9C%81%E3%83%A1%E3%83%A2%E3%83%AA%E5%8C%96%E3%81%99%E3%82%8B%E3%81%9F%E3%82%81%E3%81%AE%E5%BC%95%E6%95%B0%E3%82%92%E3%81%A4%E3%81%91%E3%82%8B
-DEFAULT_BROWSER_VIEW_PORT = {"width": 480, "height": 600}
+DEFAULT_BROWSER_VIEW_PORT = {"width": 1280, "height": 900}
 
 
 class LaunchArguments:

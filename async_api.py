@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from playwright.async_api import Browser
     from playwright.async_api import BrowserContext
     from playwright.async_api import ConsoleMessage
+    from playwright.async_api import Locator
     from playwright.async_api import Page
     from playwright.async_api import Playwright
     from playwright.async_api import Response
@@ -206,3 +207,12 @@ class ScrapingBrowser:
 
     async def storage_state(self, path: Path) -> None:
         await self._handles.save_storage_state(path)
+
+    async def wait_for(self, selector: str, *, timeout: float | None = None) -> Locator:
+        """Wait for an element to be present and return its locator."""
+        locator = self.page.locator(selector).first
+        if timeout is not None:
+            await locator.wait_for(state="attached", timeout=timeout * 1000)
+        else:
+            await locator.wait_for(state="attached")
+        return locator

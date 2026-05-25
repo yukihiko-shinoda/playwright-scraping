@@ -2,7 +2,7 @@
 
 from logging import getLogger
 
-from playwrightscraping.sync_api import ScrapingBrowser
+from playwrightscraping.async_api import ScrapingBrowser
 
 __all__ = ["WebPage"]
 

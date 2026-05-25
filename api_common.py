@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+import functools
+import os
+import re
+import subprocess
+from pathlib import Path
 from typing import Any
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 __all__ = [
     "DEFAULT_BROWSER_ARGS",
@@ -16,17 +17,53 @@ __all__ = [
     "LaunchArguments",
 ]
 
+
+@functools.lru_cache(maxsize=1)
+def _chromium_major_version() -> str:
+    """Return the major version of the Playwright-bundled Chromium executable."""
+    search_roots = [
+        Path(os.environ.get("PLAYWRIGHT_BROWSERS_PATH", Path.home() / ".cache" / "ms-playwright")),
+        Path("/ms-playwright"),
+    ]
+    for root in search_roots:
+        for exe in sorted(root.glob("chromium-*/chrome-linux/chrome"), reverse=True):
+            try:
+                out = subprocess.run(  # noqa: S603
+                    [str(exe), "--version"],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=5,
+                ).stdout
+                m = re.search(r"(\d+)", out)
+                if m:
+                    return m.group(1)
+            except (OSError, subprocess.TimeoutExpired):
+                continue
+    return "133"
+
+
+def _build_user_agent(major: str) -> str:
+    return (
+        f"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+        f"AppleWebKit/537.36 (KHTML, like Gecko) Chrome/{major}.0.0.0 Safari/537.36"
+    )
+
+
+def _build_sec_ch_ua(major: str) -> str:
+    return f'"Chromium";v="{major}", "Google Chrome";v="{major}", "Not_A Brand";v="99"'
+
+
 # User-Agent を設定しないと WAON のページがレスポンスで HTML を返さない仕様になっていました
 # User-Agent の設定方法は次を参考にしました:
 # - Selenium User-Agent Guide: Changing and Rotating Headers
 #   https://brightdata.com/blog/web-data/selenium-user-agent?kw=&cpn=13950045001&utm_matchtype=&utm_matchtype=&cq_src=google_ads&cq_cmp=13950045001&cq_term=&cq_plac=&cq_net=g&cq_plt=gp&utm_term=&utm_campaign=web_data-apac-search_generic-desktop&utm_source=adwords&utm_medium=ppc&utm_content=dataset-dsa&hsa_acc=1393175403&hsa_cam=13950045001&hsa_grp=133051793747&hsa_ad=622510825433&hsa_src=g&hsa_tgt=aud-1443847472521:dsa-1665041052623&hsa_kw=&hsa_mt=&hsa_net=adwords&hsa_ver=3&gad_source=1&gclid=CjwKCAiA5eC9BhAuEiwA3CKwQg952NCF0RakDla2KFWZ5W7OyspldKq9RUaE6IIw1XPtUclAbNegCBoCz9AQAvD_BwE
-DEFAULT_CUSTOM_USER_AGENT = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
-)
+# インストール済み Chromium のバージョンから動的に生成します
+_CHROMIUM_MAJOR = _chromium_major_version()
+DEFAULT_CUSTOM_USER_AGENT = _build_user_agent(_CHROMIUM_MAJOR)
 DEFAULT_EXTRA_HTTP_HEADERS = {
     # Sec-CH-UA を設定しないと WAON のページがレスポンスで HTML を返さない仕様になっていました
-    "sec-ch-ua": '"Chromium";v="142", "Google Chrome";v="142", "Not_A Brand";v="99"'
+    "sec-ch-ua": _build_sec_ch_ua(_CHROMIUM_MAJOR),
 }
 
 DEFAULT_BROWSER_ARGS = [

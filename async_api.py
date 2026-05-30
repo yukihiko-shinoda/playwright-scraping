@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import contextlib
+import os
+import sys
 from logging import getLogger
 from typing import TYPE_CHECKING
 from typing import Self
@@ -27,6 +29,7 @@ if TYPE_CHECKING:
 
 
 __all__ = [
+    "FirefoxScrapingBrowser",
     "ResponseChecker",
     "ScrapingBrowser",
 ]
@@ -140,6 +143,179 @@ _WEBDRIVER_HIDE_SCRIPT = """
         };
     }
 """
+
+
+def _system_firefox_executable() -> str | None:
+    """Return the installed Firefox binary path on macOS, or None to use Playwright's bundled build.
+
+    Akamai Bot Manager fingerprints the TLS ClientHello.  Playwright's bundled Firefox
+    has a non-standard fingerprint that Akamai blocks for authenticated paths.  The
+    release Firefox from mozilla.org has an allowlisted fingerprint.
+    """
+    if sys.platform == "darwin":
+        path = "/Applications/Firefox.app/Contents/MacOS/firefox"
+        if os.path.exists(path):
+            return path
+    return None
+
+
+class _FirefoxHandles:
+    def __init__(self, *, storage_state: Path | None = None) -> None:
+        self._storage_state = storage_state
+        self._playwright: Playwright | None = None
+        self._browser: Browser | None = None
+        self._context: BrowserContext | None = None
+        self._page: Page | None = None
+
+    async def __aenter__(self) -> Self:
+        self._playwright = await async_playwright().start()
+        self._browser = await self._playwright.firefox.launch(
+            executable_path=_system_firefox_executable(),
+            headless=False,
+        )
+        context_options: dict[str, object] = {"accept_downloads": True}
+        if self._storage_state is not None:
+            context_options["storage_state"] = self._storage_state
+        self._context = await self._browser.new_context(**context_options)
+        # Hide navigator.webdriver before any page loads so Akamai's beacon JS
+        # does not flag this session as automated.
+        await self._context.add_init_script("""
+            Object.defineProperty(navigator, 'webdriver', {get: () => undefined});
+
+            // Delay login form submission so Akamai's sensor POST can complete before
+            // the page navigates away.  Without this, Firefox aborts the sensor XHR
+            // (NS_BINDING_ABORTED) the moment navigation starts, and Akamai blocks the
+            // target page because no fingerprint data was received.
+            //
+            // Root cause: GTM (Google Tag Manager) intercepts the submit event in
+            // CAPTURE phase, fires sensors asynchronously, then calls form.submit()
+            // programmatically.  form.submit() bypasses the submit event entirely, so
+            // a bubble-phase document.addEventListener('submit') can't prevent it.
+            //
+            // Fix: patch BOTH code paths:
+            //   1. HTMLFormElement.prototype.submit — catches programmatic form.submit()
+            //   2. document.addEventListener('submit') — catches native button-click submit
+            // A _submitting flag prevents double-firing when both paths trigger together.
+            // After a 5 s delay the sensor has time to complete and set its cookie.
+            (function() {
+                var _origSubmit = HTMLFormElement.prototype.submit;
+                var _submitting = false;
+
+                function delayAndSubmit(form) {
+                    if (_submitting) return;
+                    _submitting = true;
+                    setTimeout(function() {
+                        _submitting = false;
+                        _origSubmit.call(form);
+                    }, 5000);
+                }
+
+                HTMLFormElement.prototype.submit = function() {
+                    if (!this.action || this.action.indexOf('V0100') === -1) {
+                        _origSubmit.call(this);
+                        return;
+                    }
+                    delayAndSubmit(this);
+                };
+
+                document.addEventListener('submit', function(e) {
+                    var form = e.target;
+                    if (!form || !form.action || form.action.indexOf('V0100') === -1) return;
+                    e.preventDefault();
+                    delayAndSubmit(form);
+                }, false);
+            })();
+        """)
+        self._page = await self._context.new_page()
+        return self
+
+    async def __aexit__(
+        self,
+        _exc_type: type[BaseException] | None,
+        _exc_value: BaseException | None,
+        _traceback: TracebackType | None,
+    ) -> None:
+        if self._context:
+            await self._context.close()
+        if self._browser:
+            await self._browser.close()
+        if self._playwright:
+            await self._playwright.stop()
+
+    async def screenshot(self, path: str) -> None:
+        if self._page:
+            await self._page.screenshot(path=path)
+
+    async def save_storage_state(self, path: Path) -> None:
+        if self._context is None:
+            msg = "Browser context is not initialized. Use async context manager."
+            raise RuntimeError(msg)
+        await self._context.storage_state(path=path)
+
+    @property
+    def context(self) -> BrowserContext:
+        if self._context is None:
+            msg = "Browser context is not initialized. Use async context manager."
+            raise RuntimeError(msg)
+        return self._context
+
+    @property
+    def page(self) -> Page:
+        if self._page is None:
+            msg = "Browser page is not initialized. Use async context manager."
+            raise RuntimeError(msg)
+        return self._page
+
+
+class FirefoxScrapingBrowser:
+    """Async context manager for a headless Firefox browser.
+
+    Use instead of ScrapingBrowser for sites that block Chromium via HTTP/2 fingerprinting.
+    """
+
+    def __init__(
+        self,
+        *,
+        storage_state: Path | None = None,
+        take_screenshot: bool = False,
+    ) -> None:
+        self._take_screenshot = take_screenshot
+        self._handles = _FirefoxHandles(storage_state=storage_state)
+        self.logger = getLogger(__name__)
+
+    async def __aenter__(self) -> Self:
+        await self._handles.__aenter__()
+        return self
+
+    async def __aexit__(
+        self,
+        _exc_type: type[BaseException] | None,
+        _exc_value: BaseException | None,
+        _traceback: TracebackType | None,
+    ) -> None:
+        if self._take_screenshot:
+            await self._handles.screenshot(path="final_state.png")
+        await self._handles.__aexit__(_exc_type, _exc_value, _traceback)
+
+    @property
+    def context(self) -> BrowserContext:
+        return self._handles.context
+
+    @property
+    def page(self) -> Page:
+        return self._handles.page
+
+    async def storage_state(self, path: Path) -> None:
+        await self._handles.save_storage_state(path)
+
+    async def wait_for(self, selector: str, *, timeout: float | None = None) -> Locator:
+        """Wait for an element to be present and return its locator."""
+        locator = self.page.locator(selector).first
+        if timeout is not None:
+            await locator.wait_for(state="attached", timeout=timeout * 1000)
+        else:
+            await locator.wait_for(state="attached")
+        return locator
 
 
 class ResponseChecker:

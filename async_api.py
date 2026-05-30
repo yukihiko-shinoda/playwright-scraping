@@ -171,7 +171,7 @@ class _FirefoxHandles:
         self._playwright = await async_playwright().start()
         self._browser = await self._playwright.firefox.launch(
             executable_path=_system_firefox_executable(),
-            headless=False,
+            headless=False,  # headless=True is also blocked by Akamai even with system Firefox
         )
         context_options: dict[str, object] = {"accept_downloads": True}
         if self._storage_state is not None:

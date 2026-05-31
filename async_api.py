@@ -6,33 +6,38 @@ import contextlib
 import os
 import sys
 from logging import getLogger
-from typing import TYPE_CHECKING
-from typing import Self
+from typing import TYPE_CHECKING, Protocol, Self
 
 from playwright.async_api import async_playwright
 
 from playwrightscraping.api_common import LaunchArguments
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable
-    from collections.abc import Callable
+    from collections.abc import Awaitable, Callable
     from pathlib import Path
     from types import TracebackType
 
-    from playwright.async_api import Browser
-    from playwright.async_api import BrowserContext
-    from playwright.async_api import ConsoleMessage
-    from playwright.async_api import Locator
-    from playwright.async_api import Page
-    from playwright.async_api import Playwright
-    from playwright.async_api import Response
+    from playwright.async_api import Browser, BrowserContext, ConsoleMessage, Locator, Page, Playwright, Response
 
 
 __all__ = [
     "FirefoxScrapingBrowser",
     "ResponseChecker",
     "ScrapingBrowser",
+    "ScrapingBrowserProtocol",
 ]
+
+
+class ScrapingBrowserProtocol(Protocol):
+    @property
+    def context(self) -> BrowserContext: ...
+
+    @property
+    def page(self) -> Page: ...
+
+    async def wait_for(self, selector: str, *, timeout: float | None = None) -> Locator: ...
+
+    async def storage_state(self, path: Path) -> None: ...
 
 
 class _PlaywrightHandles:
@@ -176,7 +181,8 @@ class _FirefoxHandles:
         context_options: dict[str, object] = {"accept_downloads": True}
         if self._storage_state is not None:
             context_options["storage_state"] = self._storage_state
-        self._context = await self._browser.new_context(**context_options)
+        # Reason: Playwright's type stubs are incomplete for new_context options; ignore type errors.
+        self._context = await self._browser.new_context(**context_options)  # type: ignore[arg-type]
         # Hide navigator.webdriver before any page loads so Akamai's beacon JS
         # does not flag this session as automated.
         await self._context.add_init_script("""

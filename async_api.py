@@ -7,18 +7,27 @@ import os
 import sys
 from logging import getLogger
 from pathlib import Path as _Path
-from typing import TYPE_CHECKING, Protocol, Self
+from typing import TYPE_CHECKING
+from typing import Protocol
+from typing import Self
 
 from playwright.async_api import async_playwright
 
 from playwrightscraping.api_common import LaunchArguments
 
 if TYPE_CHECKING:
-    from collections.abc import Awaitable, Callable
+    from collections.abc import Awaitable
+    from collections.abc import Callable
     from pathlib import Path
     from types import TracebackType
 
-    from playwright.async_api import Browser, BrowserContext, ConsoleMessage, Locator, Page, Playwright, Response
+    from playwright.async_api import Browser
+    from playwright.async_api import BrowserContext
+    from playwright.async_api import ConsoleMessage
+    from playwright.async_api import Locator
+    from playwright.async_api import Page
+    from playwright.async_api import Playwright
+    from playwright.async_api import Response
 
 _JS_DIR = _Path(__file__).parent / "js"
 
@@ -52,7 +61,8 @@ class _PlaywrightHandles:
         self._page: Page | None = None
 
     async def __aenter__(self) -> Self:
-        """Start Playwright, launch browser, and create context and first page."""
+        """Start Playwright, launch browser, and create context and first
+        page."""
         self._playwright = await async_playwright().start()
         self._browser = await self._playwright.chromium.launch(args=self.args.browser_args)
         self._context = await self._browser.new_context(**self.args.context_options)
@@ -138,11 +148,13 @@ _AKAMAI_FORM_DELAY_INIT = (_JS_DIR / "akamai-form-submit-delay-init.js").read_te
 
 
 def _system_firefox_executable() -> str | None:
-    """Return the installed Firefox binary path on macOS, or None to use Playwright's bundled build.
+    """Return the installed Firefox binary path on macOS, or None to use
+    Playwright's bundled build.
 
-    Akamai Bot Manager fingerprints the TLS ClientHello.  Playwright's bundled Firefox
-    has a non-standard fingerprint that Akamai blocks for authenticated paths.  The
-    release Firefox from mozilla.org has an allowlisted fingerprint.
+    Akamai Bot Manager fingerprints the TLS ClientHello.  Playwright's
+    bundled Firefox has a non-standard fingerprint that Akamai blocks
+    for authenticated paths.  The release Firefox from mozilla.org has
+    an allowlisted fingerprint.
     """
     if sys.platform == "darwin":
         path = "/Applications/Firefox.app/Contents/MacOS/firefox"
@@ -162,8 +174,19 @@ class _FirefoxHandles:
     async def __aenter__(self) -> Self:
         self._playwright = await async_playwright().start()
         self._browser = await self._playwright.firefox.launch(
-            executable_path=_system_firefox_executable(),
+            # Use Playwright's bundled Firefox rather than system Firefox.
+            # System Firefox crashes on launch (GPU Helper fails to connect to
+            # com.apple.hiservices-xpcservice) after being manually opened and closed.
+            # Playwright's bundled Firefox is built for this use case and avoids the issue.
+            # On macOS, it uses the same NSS/TLS stack so the TLS fingerprint still passes
+            # Akamai's allowlist check (the requirement is macOS host, not system Firefox).
             headless=False,  # headless=True is also blocked by Akamai even with system Firefox
+            firefox_user_prefs={
+                # This preference has no effect — Playwright overrides it at runtime
+                # regardless.  The actual fix is the prototype-level patch in
+                # akamai-form-submit-delay-init.js.  Kept as belt-and-suspenders intent.
+                "dom.webdriver.enabled": False,
+            },
         )
         context_options: dict[str, object] = {"accept_downloads": True}
         if self._storage_state is not None:
@@ -218,7 +241,8 @@ class _FirefoxHandles:
 class FirefoxScrapingBrowser:
     """Async context manager for a headless Firefox browser.
 
-    Use instead of ScrapingBrowser for sites that block Chromium via HTTP/2 fingerprinting.
+    Use instead of ScrapingBrowser for sites that block Chromium via
+    HTTP/2 fingerprinting.
     """
 
     def __init__(
@@ -305,7 +329,8 @@ class ScrapingBrowser:
         return self
 
     async def enable_log_virtual_authenticator(self) -> None:
-        """Enable logging of WebAuthn virtual authenticator usage and hide webdriver property for anti-bot evasion."""
+        """Enable logging of WebAuthn virtual authenticator usage and hide
+        webdriver property for anti-bot evasion."""
         await self._handles.add_init_script(_WEBDRIVER_HIDE_SCRIPT)
         self._handles.on_console(lambda msg: self.logger.info("[browser:%s] %s", msg.type, msg.text))
         if self._response_checker:

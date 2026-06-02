@@ -20,7 +20,8 @@ __all__ = [
 
 @functools.lru_cache(maxsize=1)
 def _chromium_major_version() -> str:
-    """Return the major version of the Playwright-bundled Chromium executable."""
+    """Return the major version of the Playwright-bundled Chromium
+    executable."""
     search_roots = [
         Path(os.environ.get("PATCHRIGHT_BROWSERS_PATH", Path.home() / ".cache" / "ms-patchright")),
         Path(os.environ.get("PLAYWRIGHT_BROWSERS_PATH", Path.home() / ".cache" / "ms-playwright")),

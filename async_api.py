@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import os
+import subprocess
 import sys
 from logging import getLogger
 from pathlib import Path as _Path
@@ -166,12 +168,24 @@ def _system_firefox_executable() -> str | None:
 class _FirefoxHandles:
     def __init__(self, *, storage_state: Path | None = None) -> None:
         self._storage_state = storage_state
+        self._xvfb: asyncio.subprocess.Process | None = None
         self._playwright: Playwright | None = None
         self._browser: Browser | None = None
         self._context: BrowserContext | None = None
         self._page: Page | None = None
 
     async def __aenter__(self) -> Self:
+        if sys.platform != "darwin":
+            self._xvfb = await asyncio.create_subprocess_exec(
+                "/usr/bin/Xvfb",
+                ":99",
+                "-screen",
+                "0",
+                "1280x900x24",
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            os.environ["DISPLAY"] = ":99"
         self._playwright = await async_playwright().start()
         self._browser = await self._playwright.firefox.launch(
             # Use Playwright's bundled Firefox rather than system Firefox.
@@ -212,6 +226,13 @@ class _FirefoxHandles:
             await self._browser.close()
         if self._playwright:
             await self._playwright.stop()
+        await self._stop_xvfb()
+
+    async def _stop_xvfb(self) -> None:
+        if self._xvfb:
+            if self._xvfb.returncode is None:
+                self._xvfb.terminate()
+            await self._xvfb.wait()
 
     async def screenshot(self, path: str) -> None:
         if self._page:

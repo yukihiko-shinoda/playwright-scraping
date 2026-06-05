@@ -64,7 +64,8 @@ class _PlaywrightHandles:
 
     async def __aenter__(self) -> Self:
         """Start Playwright, launch browser, and create context and first
-        page."""
+        page.
+        """
         self._playwright = await async_playwright().start()
         self._browser = await self._playwright.chromium.launch(args=self.args.browser_args)
         self._context = await self._browser.new_context(**self.args.context_options)
@@ -181,7 +182,7 @@ class _FirefoxHandles:
                 ":99",
                 "-screen",
                 "0",
-                "1280x900x24",
+                "1440x900x24",
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
@@ -205,6 +206,18 @@ class _FirefoxHandles:
         context_options: dict[str, object] = {"accept_downloads": True}
         if self._storage_state is not None:
             context_options["storage_state"] = self._storage_state
+        if sys.platform != "darwin":
+            # Spoof macOS Firefox profile so Akamai's JS sensor does not detect Linux signals.
+            # Derive the Firefox major version from the running browser to stay in sync with Playwright.
+            ff_major = self._browser.version.split(".")[0]
+            context_options["user_agent"] = (
+                f"Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:{ff_major}.0) Gecko/20100101 Firefox/{ff_major}.0"
+            )
+            # Viewport matches the Xvfb display (1440x900) and the JS-patched screen.width/height.
+            # Playwright's default 1280px viewport creates a detectable innerWidth ≠ screen.width gap.
+            context_options["viewport"] = {"width": 1440, "height": 900}
+            # locale sets navigator.language; without it Firefox returns undefined on Linux.
+            context_options["locale"] = "en-US"
         # Reason: Playwright's type stubs are incomplete for new_context options; ignore type errors.
         self._context = await self._browser.new_context(**context_options)  # type: ignore[arg-type]
         # Hide navigator.webdriver before any page loads so Akamai's beacon JS
@@ -351,7 +364,8 @@ class ScrapingBrowser:
 
     async def enable_log_virtual_authenticator(self) -> None:
         """Enable logging of WebAuthn virtual authenticator usage and hide
-        webdriver property for anti-bot evasion."""
+        webdriver property for anti-bot evasion.
+        """
         await self._handles.add_init_script(_WEBDRIVER_HIDE_SCRIPT)
         self._handles.on_console(lambda msg: self.logger.info("[browser:%s] %s", msg.type, msg.text))
         if self._response_checker:

@@ -148,6 +148,7 @@ class _PlaywrightHandles:
 
 _WEBDRIVER_HIDE_SCRIPT = (_JS_DIR / "navigator-webdriver-hide.js").read_text()
 _AKAMAI_FORM_DELAY_INIT = (_JS_DIR / "akamai-form-submit-delay-init.js").read_text()
+_AKAMAI_LINUX_MACOS_SPOOF_INIT = (_JS_DIR / "akamai-linux-macos-spoof.js").read_text()
 
 
 def _system_firefox_executable() -> str | None:
@@ -220,9 +221,10 @@ class _FirefoxHandles:
             context_options["locale"] = "en-US"
         # Reason: Playwright's type stubs are incomplete for new_context options; ignore type errors.
         self._context = await self._browser.new_context(**context_options)  # type: ignore[arg-type]
-        # Hide navigator.webdriver before any page loads so Akamai's beacon JS
-        # does not flag this session as automated.  Also patches form submit to
-        # delay navigation until Akamai's sensor POST completes (see js/ for details).
+        if sys.platform != "darwin":
+            # Spoof macOS canvas/WebGL/audio/navigator signals; real macOS already passes Akamai as-is.
+            await self._context.add_init_script(_AKAMAI_LINUX_MACOS_SPOOF_INIT)
+        # Hide navigator.webdriver and delay form submit until Akamai's sensor POST completes.
         await self._context.add_init_script(_AKAMAI_FORM_DELAY_INIT)
         self._page = await self._context.new_page()
         return self

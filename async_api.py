@@ -63,9 +63,7 @@ class _PlaywrightHandles:
         self._page: Page | None = None
 
     async def __aenter__(self) -> Self:
-        """Start Playwright, launch browser, and create context and first
-        page.
-        """
+        """Start Playwright, launch browser, and create context and first page."""
         self._playwright = await async_playwright().start()
         self._browser = await self._playwright.chromium.launch(args=self.args.browser_args)
         self._context = await self._browser.new_context(**self.args.context_options)
@@ -152,13 +150,10 @@ _AKAMAI_LINUX_MACOS_SPOOF_INIT = (_JS_DIR / "akamai-linux-macos-spoof.js").read_
 
 
 def _system_firefox_executable() -> str | None:
-    """Return the installed Firefox binary path on macOS, or None to use
-    Playwright's bundled build.
+    """Return the installed Firefox binary path on macOS, or None to use Playwright's bundled build.
 
-    Akamai Bot Manager fingerprints the TLS ClientHello.  Playwright's
-    bundled Firefox has a non-standard fingerprint that Akamai blocks
-    for authenticated paths.  The release Firefox from mozilla.org has
-    an allowlisted fingerprint.
+    Akamai Bot Manager fingerprints the TLS ClientHello.  Playwright's bundled Firefox has a non-standard fingerprint
+    that Akamai blocks for authenticated paths.  The release Firefox from mozilla.org has an allowlisted fingerprint.
     """
     if sys.platform == "darwin":
         path = "/Applications/Firefox.app/Contents/MacOS/firefox"
@@ -277,8 +272,7 @@ class _FirefoxHandles:
 class FirefoxScrapingBrowser:
     """Async context manager for a headless Firefox browser.
 
-    Use instead of ScrapingBrowser for sites that block Chromium via
-    HTTP/2 fingerprinting.
+    Use instead of ScrapingBrowser for sites that block Chromium via HTTP/2 fingerprinting.
     """
 
     def __init__(
@@ -365,9 +359,7 @@ class ScrapingBrowser:
         return self
 
     async def enable_log_virtual_authenticator(self) -> None:
-        """Enable logging of WebAuthn virtual authenticator usage and hide
-        webdriver property for anti-bot evasion.
-        """
+        """Enable logging of WebAuthn virtual authenticator usage and hide webdriver property for anti-bot evasion."""
         await self._handles.add_init_script(_WEBDRIVER_HIDE_SCRIPT)
         self._handles.on_console(lambda msg: self.logger.info("[browser:%s] %s", msg.type, msg.text))
         if self._response_checker:

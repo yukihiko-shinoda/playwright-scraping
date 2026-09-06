@@ -280,8 +280,10 @@ class FirefoxScrapingBrowser:
         *,
         storage_state: Path | None = None,
         take_screenshot: bool = False,
+        screenshot_path: str = "final_state.png",
     ) -> None:
         self._take_screenshot = take_screenshot
+        self._screenshot_path = screenshot_path
         self._handles = _FirefoxHandles(storage_state=storage_state)
         self.logger = getLogger(__name__)
 
@@ -296,7 +298,7 @@ class FirefoxScrapingBrowser:
         _traceback: TracebackType | None,
     ) -> None:
         if self._take_screenshot:
-            await self._handles.screenshot(path="final_state.png")
+            await self._handles.screenshot(path=self._screenshot_path)
         await self._handles.__aexit__(_exc_type, _exc_value, _traceback)
 
     @property
@@ -347,9 +349,11 @@ class ScrapingBrowser:
         storage_state: Path | None = None,
         response_checker: ResponseChecker | None = None,
         take_screenshot: bool = False,
+        screenshot_path: str = "final_state.png",
     ) -> None:
         self._response_checker = response_checker
         self._take_screenshot = take_screenshot
+        self._screenshot_path = screenshot_path
         self._handles = _PlaywrightHandles(is_economizing=is_economizing, storage_state=storage_state)
         self.logger = getLogger(__name__)
 
@@ -372,7 +376,7 @@ class ScrapingBrowser:
         _traceback: TracebackType | None,
     ) -> None:
         if self._take_screenshot:
-            await self._handles.screenshot(path="final_state.png")
+            await self._handles.screenshot(path=self._screenshot_path)
         await self._handles.__aexit__(_exc_type, _exc_value, _traceback)
 
     @property

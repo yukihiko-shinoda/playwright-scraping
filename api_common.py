@@ -40,7 +40,7 @@ def _chromium_major_version() -> str:
                 m = re.search(r"(\d+)", out)
                 if m:
                     return m.group(1)
-            except (OSError, subprocess.TimeoutExpired):
+            except OSError, subprocess.TimeoutExpired:
                 continue
     return "133"
 

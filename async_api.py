@@ -9,7 +9,7 @@ import contextlib
 import os
 import sys
 from logging import getLogger
-from pathlib import Path as _Path
+from pathlib import Path
 from typing import TYPE_CHECKING
 from typing import Protocol
 from typing import Self
@@ -21,7 +21,6 @@ from playwrightscraping.api_common import LaunchArguments
 if TYPE_CHECKING:
     from collections.abc import Awaitable
     from collections.abc import Callable
-    from pathlib import Path
     from types import TracebackType
 
     from playwright.async_api import Browser
@@ -32,7 +31,7 @@ if TYPE_CHECKING:
     from playwright.async_api import Playwright
     from playwright.async_api import Response
 
-_JS_DIR = _Path(__file__).parent / "js"
+_JS_DIR = Path(__file__).parent / "js"
 
 
 __all__ = [
@@ -44,6 +43,8 @@ __all__ = [
 
 
 class ScrapingBrowserProtocol(Protocol):
+    """Browser interface that page objects depend on, satisfied by both Chromium and Firefox browsers."""
+
     @property
     def context(self) -> BrowserContext: ...
 
@@ -163,7 +164,7 @@ def _system_firefox_executable() -> str | None:
     """
     if sys.platform == "darwin":
         path = "/Applications/Firefox.app/Contents/MacOS/firefox"
-        if _Path(path).exists():
+        if Path(path).exists():
             return path
     return None
 

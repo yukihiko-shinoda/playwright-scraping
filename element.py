@@ -6,7 +6,7 @@ __all__ = ["get_text"]
 
 
 def get_text(locator: Locator) -> str:
-    """Gets Playwright locator text.
+    """Get Playwright locator text.
 
     Playwright's text_content() returns all text including hidden elements,
     while inner_text() returns only visible text. We prefer inner_text()

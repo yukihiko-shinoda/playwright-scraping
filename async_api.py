@@ -7,7 +7,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import os
-import subprocess
 import sys
 from logging import getLogger
 from pathlib import Path as _Path
@@ -51,7 +50,12 @@ class ScrapingBrowserProtocol(Protocol):
     @property
     def page(self) -> Page: ...
 
-    async def wait_for(self, selector: str, *, timeout: float | None = None) -> Locator: ...
+    # Reason: The `timeout` isn't a hand-made timeout but forwarded to Playwright's native timeout as-is:
+    # - async-function-with-timeout (ASYNC109) | Ruff
+    #   https://docs.astral.sh/ruff/rules/async-function-with-timeout/
+    # - Locator | Playwright Python
+    #   https://playwright.dev/python/docs/api/class-locator#locator-wait-for
+    async def wait_for(self, selector: str, *, timeout: float | None = None) -> Locator: ...  # noqa: ASYNC109
 
     async def storage_state(self, path: Path) -> None: ...
 
@@ -159,7 +163,7 @@ def _system_firefox_executable() -> str | None:
     """
     if sys.platform == "darwin":
         path = "/Applications/Firefox.app/Contents/MacOS/firefox"
-        if os.path.exists(path):
+        if _Path(path).exists():
             return path
     return None
 
@@ -181,8 +185,8 @@ class _FirefoxHandles:
                 "-screen",
                 "0",
                 "1440x900x24",
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
+                stdout=asyncio.subprocess.DEVNULL,
+                stderr=asyncio.subprocess.DEVNULL,
             )
             os.environ["DISPLAY"] = ":99"
         self._playwright = await async_playwright().start()
@@ -314,7 +318,12 @@ class FirefoxScrapingBrowser:
     async def storage_state(self, path: Path) -> None:
         await self._handles.save_storage_state(path)
 
-    async def wait_for(self, selector: str, *, timeout: float | None = None) -> Locator:
+    # Reason: The `timeout` isn't a hand-made timeout but forwarded to Playwright's native timeout as-is:
+    # - async-function-with-timeout (ASYNC109) | Ruff
+    #   https://docs.astral.sh/ruff/rules/async-function-with-timeout/
+    # - Locator | Playwright Python
+    #   https://playwright.dev/python/docs/api/class-locator#locator-wait-for
+    async def wait_for(self, selector: str, *, timeout: float | None = None) -> Locator:  # noqa: ASYNC109
         """Wait for an element to be present and return its locator."""
         locator = self.page.locator(selector).first
         if timeout is not None:
@@ -392,7 +401,12 @@ class ScrapingBrowser:
     async def storage_state(self, path: Path) -> None:
         await self._handles.save_storage_state(path)
 
-    async def wait_for(self, selector: str, *, timeout: float | None = None) -> Locator:
+    # Reason: The `timeout` isn't a hand-made timeout but forwarded to Playwright's native timeout as-is:
+    # - async-function-with-timeout (ASYNC109) | Ruff
+    #   https://docs.astral.sh/ruff/rules/async-function-with-timeout/
+    # - Locator | Playwright Python
+    #   https://playwright.dev/python/docs/api/class-locator#locator-wait-for
+    async def wait_for(self, selector: str, *, timeout: float | None = None) -> Locator:  # noqa: ASYNC109
         """Wait for an element to be present and return its locator."""
         locator = self.page.locator(selector).first
         if timeout is not None:

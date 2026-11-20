@@ -7,7 +7,11 @@ from __future__ import annotations
 import functools
 import os
 import re
-import subprocess
+
+# Reason: The subprocess is required to read the version of the Playwright-bundled Chromium binary:
+# - Blacklist Imports (B404: import_subprocess) | Bandit
+#   https://bandit.readthedocs.io/en/latest/blacklists/blacklist_imports.html
+import subprocess  # nosec B404
 from pathlib import Path
 from typing import Any
 
@@ -32,7 +36,15 @@ def _chromium_major_version() -> str:
     for root in search_roots:
         for exe in sorted(root.glob("chromium-*/chrome-linux/chrome"), reverse=True):
             try:
-                out = subprocess.run(  # noqa: S603
+                # Reason: No shell, the only argument is constant, and the executable is in Playwright's own
+                # browser install directory, which Playwright itself trusts to launch the browser:
+                # - B603: subprocess_without_shell_equals_true | Bandit
+                #   https://bandit.readthedocs.io/en/latest/plugins/b603_subprocess_without_shell_equals_true.html
+                # - Ruff rule S603 subprocess-without-shell-equals-true
+                #   https://docs.astral.sh/ruff/rules/subprocess-without-shell-equals-true/
+                # - Browsers | Playwright Python
+                #   https://playwright.dev/python/docs/browsers
+                out = subprocess.run(  # noqa: S603 # nosec B603
                     [str(exe), "--version"],
                     capture_output=True,
                     text=True,
@@ -42,7 +54,7 @@ def _chromium_major_version() -> str:
                 m = re.search(r"(\d+)", out)
                 if m:
                     return m.group(1)
-            except OSError, subprocess.TimeoutExpired:
+            except (OSError, subprocess.TimeoutExpired):
                 continue
     return "133"
 
@@ -55,7 +67,14 @@ def _build_user_agent(major: str) -> str:
 
 
 def _build_sec_ch_ua(major: str) -> str:
-    return f'"Chromium";v="{major}", "Google Chrome";v="{major}", "Not_A Brand";v="99"'
+    # Reason: The `!r` outputs single quotes, but Sec-CH-UA allows only double quotes to delimit strings:
+    # - flake8-bugbear README, opinionated warnings, B907
+    #   https://github.com/PyCQA/flake8-bugbear#opinionated-warnings
+    # - RFC 8941 Structured Field Values for HTTP, Section 3.3.3 Strings
+    #   https://www.rfc-editor.org/rfc/rfc8941.html#name-strings
+    # - Sec-CH-UA header | MDN
+    #   https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Sec-CH-UA
+    return f'"Chromium";v="{major}", "Google Chrome";v="{major}", "Not_A Brand";v="99"'  # noqa: B907
 
 
 # User-Agent を設定しないと WAON のページがレスポンスで HTML を返さない仕様になっていました
